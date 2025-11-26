@@ -27,8 +27,9 @@ const seedData = async () => {
       { name: 'Cable Flyes', muscle_group: ['chest'], equipment: ['cable machine'], difficulty: 'intermediate', description: 'Chest isolation' },
     ];
 
-    // Get a trainer ID from user service (we'll use a mock UUID)
-    const trainerId = uuidv4(); // In real scenario, get from user service
+    // Use actual trainer ID from user service
+    const trainerId = '4420f58b-f7b9-415c-afcb-60d23ae6c17f'; // trainer@fitsync.com
+    const clientId = 'ae34ea3f-fea2-42bb-b7bc-8337e4f187f5'; // client@fitsync.com
 
     const exerciseIds = [];
     for (const ex of exercises) {
@@ -124,13 +125,24 @@ const seedData = async () => {
 
     logger.info('Seeded 1 diet plan');
 
+    // Create a training program for the test client
+    const programResult = await client.query(
+      `INSERT INTO programs (client_id, trainer_id, workout_plan_id, diet_plan_id, start_date, end_date, status, notes)
+       VALUES ($1, $2, $3, $4, CURRENT_DATE, CURRENT_DATE + INTERVAL '8 weeks', 'active', $5)
+       RETURNING id`,
+      [clientId, trainerId, wpResult.rows[0].id, null, 'Goals: Build strength, Improve fitness, Lose weight']
+    );
+
+    logger.info('Seeded 1 training program for test client');
+
     await client.query('COMMIT');
     logger.info('Training service seed completed successfully');
 
     return {
       exerciseCount: exercises.length,
       workoutPlanCount: 1,
-      dietPlanCount: 1
+      dietPlanCount: 1,
+      programCount: 1
     };
   } catch (error) {
     await client.query('ROLLBACK');
