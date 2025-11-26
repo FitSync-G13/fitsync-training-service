@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
-const { publishEvent } = require('../config/redis');
+const { validateUser } = require('../utils/httpClient');
+const { publishProgramAssigned, publishProgramCompleted, publishProgramUpdated } = require('../utils/eventPublisher');
 
 // EXERCISES
 
@@ -421,24 +422,57 @@ exports.createProgram = async (req, res) => {
   try {
     const { client_id, workout_plan_id, diet_plan_id, start_date, end_date, notes } = req.body;
     const trainer_id = req.user.id;
+    const token = req.headers.authorization;
 
+    // Validate client exists and is a client
+    try {
+      const clientData = await validateUser(client_id, token);
+      if (clientData.data.role !== 'client') {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_ROLE', message: 'Target user must be a client' }
+        });
+      }
+    } catch (error) {
+      if (error.code === 'USER_NOT_FOUND') {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'CLIENT_NOT_FOUND', message: 'Client not found' }
+        });
+      }
+      if (error.code === 'SERVICE_UNAVAILABLE') {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'SERVICE_UNAVAILABLE', message: 'Unable to validate client' }
+        });
+      }
+      throw error;
+    }
+
+    // Create program
     const result = await db.query(
-      `INSERT INTO programs (client_id, trainer_id, workout_plan_id, diet_plan_id, start_date, end_date, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO programs (client_id, trainer_id, workout_plan_id, diet_plan_id, start_date, end_date, notes, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
        RETURNING *`,
       [client_id, trainer_id, workout_plan_id, diet_plan_id, start_date, end_date, notes]
     );
 
+    const program = result.rows[0];
+
     // Publish event for notification
-    await publishEvent('program.assigned', {
-      program_id: result.rows[0].id,
+    await publishProgramAssigned({
+      id: program.id,
       client_id,
       trainer_id,
       workout_plan_id,
-      diet_plan_id
-    });
+      diet_plan_id,
+      start_date: program.start_date,
+      duration_weeks: null
+    }, req.correlationId);
 
-    res.status(201).json({ success: true, data: result.rows[0] });
+    logger.info(`Program created: ${program.id} for client ${client_id} by trainer ${trainer_id}`);
+
+    res.status(201).json({ success: true, data: program });
   } catch (error) {
     logger.error('Create program error:', error);
     res.status(500).json({ success: false, error: { code: 'CREATE_FAILED', message: 'Failed to create program' } });
@@ -531,9 +565,84 @@ exports.updateProgramStatus = async (req, res) => {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Program not found' } });
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    const program = result.rows[0];
+
+    // Publish event if program is completed
+    if (status === 'completed') {
+      await publishProgramCompleted({
+        id: program.id,
+        client_id: program.client_id,
+        trainer_id: program.trainer_id,
+        adherence_rate: null
+      }, req.correlationId);
+    } else {
+      // Publish program updated event
+      await publishProgramUpdated(program, ['status'], req.correlationId);
+    }
+
+    res.json({ success: true, data: program });
   } catch (error) {
     logger.error('Update program status error:', error);
     res.status(500).json({ success: false, error: { code: 'UPDATE_FAILED', message: 'Failed to update status' } });
+  }
+};
+
+/**
+ * Get active programs for a specific client
+ */
+exports.getActivePrograms = async (req, res) => {
+  try {
+    const { client_id } = req.params;
+
+    const result = await db.query(
+      `SELECT p.*, w.name as workout_name, d.name as diet_name
+       FROM programs p
+       LEFT JOIN workout_plans w ON p.workout_plan_id = w.id
+       LEFT JOIN diet_plans d ON p.diet_plan_id = d.id
+       WHERE p.client_id = $1 AND p.status = 'active'
+       ORDER BY p.assigned_at DESC`,
+      [client_id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    logger.error('Get active programs error:', error);
+    res.status(500).json({ success: false, error: { code: 'FETCH_FAILED', message: 'Failed to fetch active programs' } });
+  }
+};
+
+/**
+ * Complete a program
+ */
+exports.completeProgram = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adherence_rate } = req.body;
+
+    const result = await db.query(
+      'UPDATE programs SET status = $1 WHERE id = $2 RETURNING *',
+      ['completed', id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Program not found' } });
+    }
+
+    const program = result.rows[0];
+
+    // Publish completion event
+    await publishProgramCompleted({
+      id: program.id,
+      client_id: program.client_id,
+      trainer_id: program.trainer_id,
+      adherence_rate: adherence_rate || null
+    }, req.correlationId);
+
+    logger.info(`Program completed: ${program.id}`);
+
+    res.json({ success: true, data: program });
+  } catch (error) {
+    logger.error('Complete program error:', error);
+    res.status(500).json({ success: false, error: { code: 'UPDATE_FAILED', message: 'Failed to complete program' } });
   }
 };

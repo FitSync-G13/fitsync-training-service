@@ -54,8 +54,10 @@ app.put('/api/diets/:id', authenticate, authorize('admin', 'trainer'), trainingC
 // Program routes
 app.post('/api/programs', authenticate, authorize('admin', 'trainer'), trainingController.createProgram);
 app.get('/api/programs', authenticate, trainingController.listPrograms);
+app.get('/api/programs/client/:client_id/active', authenticate, trainingController.getActivePrograms);
 app.get('/api/programs/:id', authenticate, trainingController.getProgram);
 app.put('/api/programs/:id/status', authenticate, authorize('admin', 'trainer'), trainingController.updateProgramStatus);
+app.post('/api/programs/:id/complete', authenticate, authorize('admin', 'trainer'), trainingController.completeProgram);
 
 // 404 handler
 app.use((req, res) => {
