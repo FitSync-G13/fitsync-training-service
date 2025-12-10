@@ -89,6 +89,109 @@ Service runs on http://localhost:3002
 - `POST /api/programs/:id/assign` - Assign program to client
 - `GET /api/diet-plans` - Get diet plans
 
+## Testing
+
+### Test Framework
+
+This service uses **Jest** as the testing framework with:
+- Unit tests for controllers, utilities, and event publishers
+- Mocked dependencies (database, Redis, external services)
+- Code coverage reporting
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (re-runs on file changes)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+### Test Structure
+
+```
+tests/
+├── setup.js                           # Jest setup (env vars, global config)
+└── unit/
+    ├── trainingController.test.js     # Controller CRUD tests
+    ├── eventPublisher.test.js         # Redis event publishing tests
+    └── httpClient.test.js             # User service HTTP client tests
+```
+
+### Test Suites
+
+| Test File | Tests | What's Covered |
+|-----------|-------|----------------|
+| `trainingController.test.js` | 42 | Exercise CRUD, Workout Plan CRUD, Diet Plan CRUD, Program management, event publishing integration |
+| `eventPublisher.test.js` | 12 | Redis event publishing, correlation IDs, program.assigned/completed/updated events |
+| `httpClient.test.js` | 9 | User validation, batch fetching, error handling (404, timeout, service unavailable) |
+
+### Test Details
+
+#### Training Controller Tests (`trainingController.test.js`)
+- **Exercises**: Create, list (with filters), get by ID, update, delete
+- **Workout Plans**: Create, list (role-based filtering), get, update, delete
+- **Diet Plans**: Create, list, get, update (including JSON fields)
+- **Programs**: Create (with user validation), list (role-based), status updates, completion with event publishing
+
+#### Event Publisher Tests (`eventPublisher.test.js`)
+- **publishEvent**: Redis channel publishing, correlation ID handling, error resilience
+- **publishProgramAssigned**: Event data structure, optional fields
+- **publishProgramCompleted**: Completion date, adherence rate
+- **publishProgramUpdated**: Change tracking
+
+#### HTTP Client Tests (`httpClient.test.js`)
+- **validateUser**: Success, 404 handling, service unavailable, timeout
+- **fetchUsersBatch**: Success, graceful degradation on failure
+- **getUserRoleInfo**: Success, null on failure
+
+### Coverage Targets
+
+| Module | Statements | Functions | Lines |
+|--------|------------|-----------|-------|
+| `trainingController.js` | 85%+ | 100% | 85%+ |
+| `eventPublisher.js` | 100% | 100% | 100% |
+| `httpClient.js` | 90%+ | 100% | 90%+ |
+
+### Writing New Tests
+
+1. Create test files in `tests/unit/` with `.test.js` suffix
+2. Mock external dependencies at the top of the file
+3. Use `beforeEach` to reset mocks between tests
+
+Example:
+```javascript
+jest.mock('../../src/config/database', () => ({
+  query: jest.fn()
+}));
+
+const db = require('../../src/config/database');
+const controller = require('../../src/controllers/trainingController');
+
+describe('My Feature', () => {
+  let mockReq, mockRes;
+  
+  beforeEach(() => {
+    mockReq = { body: {}, params: {}, user: { id: 'trainer-123', role: 'trainer' } };
+    mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis()
+    };
+    jest.clearAllMocks();
+  });
+
+  it('should do something', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: '123' }] });
+    await controller.myFunction(mockReq, mockRes);
+    expect(mockRes.json).toHaveBeenCalledWith({ success: true, data: { id: '123' } });
+  });
+});
+```
+
 ## Database Schema
 
 Main tables:
