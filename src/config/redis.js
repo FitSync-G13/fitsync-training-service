@@ -2,10 +2,7 @@ const { createClient } = require('redis');
 const logger = require('./logger');
 
 const redisClient = createClient({
-  socket: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6379
-  }
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
 redisClient.on('error', (err) => {
@@ -35,4 +32,6 @@ const publishEvent = async (channel, data) => {
   }
 };
 
-module.exports = { redisClient, connectRedis, publishEvent };
+const getRedisClient = () => redisClient;
+
+module.exports = { redisClient, connectRedis, publishEvent, getRedisClient };
