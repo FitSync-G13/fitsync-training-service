@@ -15,8 +15,8 @@ jobs:
   build-test:
     uses: FitSync-G13/fitsync-cd-templates/.github/workflows/ci-test-build-push.yml@master
     with:
-      service_name: user-service
-      ecr_repository: fitsync-user-service
+      service_name: training-service
+      ecr_repository: fitsync-training-service
       aws_region: us-east-2
       language: 'node'
       node_version: '18'
