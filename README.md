@@ -195,10 +195,10 @@ describe('My Feature', () => {
 ## Database Schema
 
 Main tables:
-- `exercises` - Exercise library
-- `workout_programs` - Workout programs
-- `program_assignments` - Client-program assignments
-- `diet_plans` - Nutrition plans
+- `exercises`  -  Exercise library
+- `workout_programs`  -  Workout programs
+- `program_assignments`  -  Client-program assignments
+- `diet_plans`  -  Nutrition plans
 
 ## More Information
 
